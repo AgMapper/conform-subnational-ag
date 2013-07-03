@@ -1,0 +1,175 @@
+-- Description: validate/update adm1_names in ISO3_worktable
+
+-- Steps:
+-- 1) create the adm1_thesaurus if it does not exist
+-- 2) create the ISO3_adm1_worktable if it does not exist (a new one should be created each time)
+-- 3) perform a first pass one-one match of adm1_raw -> adm1_link names from the link_table_<year>
+-- 4) perform a second pass one-one match of adm1_raw -> adm1_link names from the adm1_thesaurus
+-- 5) insert adm1_names into admin worktable found in link table but not worktable
+-- 6) insert adm1_names into admin worktable found in worktable but not link table
+
+-- Notes:
+-- you must replace the previous ISO3 with the target ISO3 manually throughout this script (other than the variables)
+-- you must replace the previous <year> with the target <year> manually throughout this script (other than the variables)
+-- You must fill out the resultant adm_worktable when you are done!
+
+-- SCRIPT PARAMETERS ================================================================================
+DECLARE @iso3 VARCHAR(3)
+SET @iso3 = 'NGA'
+
+-- DO NOT ALTER BELOW THIS LINE ======================================================================
+DECLARE @link_table_name VARCHAR(19)
+SET @link_table_name = @iso3 + '_link_table'
+
+DECLARE @admin_thesaurus VARCHAR(MAX)
+SET @admin_thesaurus = '[reference].dbo.adm1_thesaurus'
+
+DECLARE @admin_worktable_name VARCHAR(18)
+SET @admin_worktable_name = @iso3 + '_adm1_worktable'
+
+DECLARE @worktable_name VARCHAR(max)
+SET @worktable_name = @iso3 + '_worktable'
+
+
+-- CREATE ADMIN THESAURUS IF NOT EXISTS ================================================================================
+DECLARE @create_admin_thesaurus VARCHAR(max)
+SET @create_admin_thesaurus = 
+'IF NOT EXISTS (SELECT 1 FROM [reference].sys.tables WHERE name = PARSENAME ('''+@admin_thesaurus+''',1))
+CREATE TABLE ' + @admin_thesaurus + 
+'(
+	adm0_raw VARCHAR(255),
+	adm1_raw VARCHAR(255),
+	adm0_link VARCHAR(255),
+	adm1_link VARCHAR(255),
+	fips0 VARCHAR(4),
+	fips1 VARCHAR(4)
+)'
+EXEC(@create_admin_thesaurus)
+
+
+-- CREATE ADMIN WORKTABLE IF NOT EXISTS ================================================================================
+DECLARE @admin_worktable VARCHAR(max)
+SET @admin_worktable = 
+'IF NOT EXISTS (SELECT 1 FROM [reference].sys.tables WHERE name = PARSENAME ('''+@admin_worktable_name+''',1)) 
+CREATE TABLE ' + @admin_worktable_name + 
+'(
+	adm0_raw NVARCHAR(255),
+	adm1_raw NVARCHAR(255),
+	adm0_link NVARCHAR(255),
+	adm1_link NVARCHAR(255),
+	fips0 VARCHAR(4),
+	fips1 VARCHAR(4),
+	adm_comment VARCHAR(MAX),
+	update_table INT
+)'
+EXEC(@admin_worktable)
+
+
+-- UPDATE WORKTABLE ADMIN LINK NAMES FROM ADMIN THEASURUS ================================================================================
+DECLARE @update_from_admins_from_thesaurus VARCHAR(max)
+SET @update_from_admins_from_thesaurus = '
+UPDATE '+@worktable_name+' SET 
+adm1_link = (
+	SELECT DISTINCT adm1_link 
+	FROM '+@admin_thesaurus+' 
+	WHERE 
+		'+@admin_thesaurus+'.adm0_link = [dbo].'+@worktable_name+'.adm0_link 
+	AND '+@admin_thesaurus+'.adm1_raw COLLATE SQL_Latin1_General_CP1_CI_AS = [dbo].'+@worktable_name+'.adm1_raw COLLATE SQL_Latin1_General_CP1_CI_AS
+),
+fips1 = (
+	SELECT DISTINCT fips1 
+	FROM '+@admin_thesaurus+' 
+	WHERE 
+		'+@admin_thesaurus+'.adm0_link = [dbo].'+@worktable_name+'.adm0_link 
+	AND '+@admin_thesaurus+'.adm1_raw COLLATE SQL_Latin1_General_CP1_CI_AS = [dbo].'+@worktable_name+'.adm1_raw COLLATE SQL_Latin1_General_CP1_CI_AS
+)
+WHERE adm1_raw = (
+	SELECT DISTINCT adm1_raw 
+	FROM '+@admin_thesaurus+' 
+	WHERE 
+		'+@admin_thesaurus+'.adm0_link = [dbo].'+@worktable_name+'.adm0_link 
+	AND '+@admin_thesaurus+'.adm1_raw COLLATE SQL_Latin1_General_CP1_CI_AS = [dbo].'+@worktable_name+'.adm1_raw COLLATE SQL_Latin1_General_CP1_CI_AS
+) 
+AND adm1_link IS NULL'
+EXEC(@update_from_admins_from_thesaurus)
+
+
+
+-- UPDATE WORKTABLE ADMIN LINK NAMES FROM LINK_TABLE ================================================================================
+DECLARE @update_from_admins_from_link VARCHAR(max)
+SET @update_from_admins_from_link = '
+UPDATE '+@worktable_name+' SET 
+adm1_link = (
+	SELECT DISTINCT ADM1_NAME 
+	FROM '+@link_table_name+' 
+	WHERE 
+		'+@link_table_name+'.ADM0_NAME = [dbo].'+@worktable_name+'.adm0_link
+	AND '+@link_table_name+'.ADM1_NAME = [dbo].'+@worktable_name+'.adm1_raw
+),
+fips1 = (
+	SELECT DISTINCT FIPS1 
+	FROM '+@link_table_name+' 
+	WHERE 
+		'+@link_table_name+'.ADM0_NAME = [dbo].'+@worktable_name+'.adm0_link
+	AND '+@link_table_name+'.ADM1_NAME = [dbo].'+@worktable_name+'.adm1_raw
+)
+WHERE adm1_raw = (
+	SELECT DISTINCT ADM1_NAME 
+	FROM '+@link_table_name+' 
+	WHERE 
+		'+@link_table_name+'.ADM0_NAME = [dbo].'+@worktable_name+'.adm0_link
+	AND '+@link_table_name+'.ADM1_NAME = [dbo].'+@worktable_name+'.adm1_raw
+) 
+AND adm1_link IS NULL'
+EXEC(@update_from_admins_from_link)
+
+
+-- INSERT INTO ADMIN WORKTABLE ADMIN NAMES FOUND IN WORKTABLE BUT NOT IN LINK TABLE ================================================================================
+DECLARE commands CURSOR FOR
+SELECT 
+'INSERT INTO '+@admin_worktable_name+'(adm0_raw, adm1_raw, adm0_link, adm1_link, fips0, fips1) 
+ VALUES ('''+adm0_raw+''','''+adm1_raw+''', NULL, NULL, NULL, NULL)'
+FROM (
+	SELECT DISTINCT adm1_raw, adm0_raw
+	FROM NGA_worktable
+	WHERE adm1_link IS NULL
+) AS temp
+DECLARE @cmd VARCHAR(MAX)
+OPEN commands
+FETCH NEXT FROM commands INTO @cmd
+WHILE @@FETCH_STATUS=0
+BEGIN
+	EXEC(@cmd)
+	FETCH NEXT FROM commands INTO @cmd
+END
+CLOSE commands
+DEALLOCATE commands
+
+
+-- INSERT INTO ADMIN WORKTABLE ADMIN NAMES FOUND IN LINK TABLE BUT NOT IN WORKTABLE ================================================================================
+
+-- MANUALLY CHANGE LINKTABLE NAME AND WORKTABLE NAME HERE!!!!===============================================
+
+DECLARE commands1 CURSOR FOR
+SELECT 
+'INSERT INTO '+@admin_worktable_name+'(adm0_raw, adm1_raw, adm0_link, adm1_link, fips0, fips1) 
+ VALUES (NULL,NULL,'''+ADM0_NAME+''','''+ADM1_NAME+''', '''+FIPS0+''','''+FIPS1+''')'
+FROM (
+	SELECT DISTINCT ADM1_NAME, ADM0_NAME, FIPS0, FIPS1
+	FROM  NGA_link_table
+	WHERE ADM1_NAME NOT IN (SELECT DISTINCT(adm1_link) FROM NGA_worktable WHERE adm1_link IS NOT NULL)
+) AS temp
+DECLARE @cmd1 VARCHAR(MAX)
+OPEN commands1
+FETCH NEXT FROM commands1 INTO @cmd1
+WHILE @@FETCH_STATUS=0
+BEGIN
+	EXEC(@cmd1)
+	FETCH NEXT FROM commands1 INTO @cmd1
+END
+CLOSE commands1
+DEALLOCATE commands1
+
+
+-- CHECK THE RESULT OF THE ABOVE OPERATIONS ================================================================================
+EXEC('SELECT DISTINCT TOP 10 * FROM ' + @worktable_name + ' WHERE adm1_link IS NOT NULL')

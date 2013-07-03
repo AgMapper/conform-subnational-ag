@@ -1,0 +1,74 @@
+-- Description: update remaning adm2_names in ISO3_worktable
+
+-- Steps:
+-- 1) update all rows in the ISO3_worktable with the corresponding mappings created in the ISO3_adm2_worktable
+-- 2) insert rows into the adm2_thesaurus with the corresponding mappings created in the ISO3_adm2_worktable
+-- 3) insert -999 rows into the ISO3_worktable from all rows flagged in the ISO3_adm2_worktable
+-- 4) drop the ISO3_adm2_worktable
+
+
+-- SCRIPT PARAMETERS ================================================================================
+DECLARE @iso3 VARCHAR(3)
+SET @iso3 = 'MWI'
+
+
+-- DO NOT ALTER BELOW THIS LINE ======================================================================
+DECLARE @link_table_name VARCHAR(19)
+SET @link_table_name = @iso3 + '_link_table'
+
+DECLARE @admin_thesaurus VARCHAR(MAX)
+SET @admin_thesaurus = '[reference].dbo.adm2_thesaurus'
+
+DECLARE @admin_worktable_name VARCHAR(max)
+SET @admin_worktable_name = @iso3 + '_adm2_worktable'
+
+DECLARE @worktable_name VARCHAR(13)
+SET @worktable_name = @iso3 + '_worktable'
+
+
+-- UPDATE WORKTABLE ADMIN LINK NAMES FROM ADMIN_WORKTABLE ================================================================================
+DECLARE @update_admins_from_worktable_sub_query VARCHAR(max)
+SET @update_admins_from_worktable_sub_query = ' 
+FROM '+@admin_worktable_name+' 
+WHERE '+@admin_worktable_name+'.adm0_raw = '+@worktable_name+'.adm0_raw
+AND '+@admin_worktable_name+'.adm1_raw = '+@worktable_name+'.adm1_raw
+AND '+@admin_worktable_name+'.adm2_raw = '+@worktable_name+'.adm2_raw
+AND '+@admin_worktable_name+'.adm2_raw IS NOT NULL
+AND update_table = 1'
+
+DECLARE @update_admins_from_worktable VARCHAR(max)
+SET @update_admins_from_worktable = '
+UPDATE '+@worktable_name+' SET 
+adm2_link = (SELECT DISTINCT adm2_link '+@update_admins_from_worktable_sub_query+'),
+fips2 = (SELECT DISTINCT fips2 '+@update_admins_from_worktable_sub_query+')
+WHERE adm2_raw = (SELECT DISTINCT adm2_raw '+@update_admins_from_worktable_sub_query+') 
+AND adm2_link IS NULL'
+PRINT (@update_admins_from_worktable)
+EXEC(@update_admins_from_worktable)
+
+
+-- UPDATE THESAURUS ADMIN NAMES BASED ON ADMIN WORKTABLE IF ROW DOES NOT ALREADY EXIST ================================================================================
+DECLARE @admin_thesaurus_columns VARCHAR(max)
+SET @admin_thesaurus_columns = 'adm0_raw, adm1_raw, adm2_raw, adm0_link, adm1_link, adm2_link, fips0, fips1, fips2'
+DECLARE @update_thesaurus_admins VARCHAR(MAX)
+SET @update_thesaurus_admins = '
+INSERT INTO ' + @admin_thesaurus + ' 
+SELECT '+@admin_thesaurus_columns+' 
+FROM '+@admin_worktable_name+' awt 
+WHERE NOT EXISTS
+	(
+		SELECT awt.adm0_raw, awt.adm1_raw, awt.adm2_raw, awt.adm0_link, awt.adm1_link, awt.adm2_link, awt.fips0, awt.fips1, awt.fips2
+		INTERSECT
+        SELECT '+@admin_thesaurus_columns+' 
+        FROM ' + @admin_thesaurus + ' 
+		WHERE update_table = 1
+	)
+AND update_table = 1 AND adm0_raw IS NOT NULL AND adm1_raw IS NOT NULL AND adm2_raw IS NOT NULL'
+EXEC(@update_thesaurus_admins)
+
+-- DELETE WORKTABLE AFTER ADMINS HAVE BEEN UPDATED ================================================================================
+-- EXEC('DROP TABLE '+@admin_worktable_name)
+
+
+-- CHECK THE RESULT OF THE ABOVE OPERATIONS ================================================================================
+EXEC('SELECT DISTINCT TOP 10 * FROM ' + @worktable_name + ' WHERE adm2_link IS NOT NULL')

@@ -1,0 +1,38 @@
+-- Description:
+-- corrects typos, illegal characters, and other column datatype discrepancies. 
+
+
+-- 1) declare incoming statistics table name
+DECLARE @imported_table_name varchar(MAX)
+SET @imported_table_name = 'NGA_raw_50'
+
+DECLARE @value_column varchar(MAX)
+SET @value_column = 'val1_raw'
+
+-- 2) identify a list of all values contained in the target column (ex:value_raw)
+EXEC('SELECT DISTINCT('+@value_column+') FROM ' + @imported_table_name + ' WHERE ISNUMERIC('+@value_column+') = 0 ORDER BY '+@value_column+' ASC')
+
+
+--SELECT DISTINCT() FROM  WHERE ISNUMERIC() = 0 ORDER BY  ASC
+
+
+
+
+-- MANUALLY RUN THIS IF NECESSARY create a unique UPDATE statement to correct the rows with the typos or illegal characters
+EXEC('UPDATE ' + @imported_table_name + ' SET value_raw = NULL WHERE RTRIM(LTRIM(value_raw)) = ''''')
+EXEC('UPDATE ' + @imported_table_name + ' SET value_raw = NULL WHERE value_raw = ''#DIV/0!''')
+-- EXEC('UPDATE ' + @imported_table_name + ' SET value_raw = NULL WHERE value_raw = ''+''')
+
+-- GET RID OF COMMAS!!
+--Update KEN_raw_31 SET val2_raw = REPLACE (val2_raw, ',', '')
+
+UPDATE BWA_raw_5 set value_raw = 25 where value_raw = '2S'
+UPDATE BWA_raw_5 set value_raw = 775 where value_raw = '77S'
+UPDATE BWA_raw_5 set value_raw = 75 where value_raw = '7S'
+UPDATE BWA_raw_5 set value_raw = 1 where value_raw = 'I'
+UPDATE BWA_raw_5 set value_raw = 1511 where value_raw = 'I.SII'
+UPDATE BWA_raw_5 set value_raw = 11 where value_raw = 'II'
+UPDATE BWA_raw_5 set value_raw = NULL where value_raw = '-'
+UPDATE BWA_raw_5 set value_raw = 3505 where value_raw = '3,SOS'
+UPDATE BWA_raw_5 set value_raw = NULL where value_raw = '-'
+UPDATE BWA_raw_5 set value_raw = NULL where value_raw = '.'

@@ -1,0 +1,10 @@
+
+
+
+
+
+update MLI_worktable set item = 'harvested area' where unit_final = 'ha'
+update MLI_worktable set item = 'production' where unit_final = 't'
+
+
+select distinct unit_raw, unit_final, item from COD_worktable

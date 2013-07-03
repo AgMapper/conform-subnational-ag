@@ -1,0 +1,159 @@
+-- Description: validate/update adm0_names in ISO3_worktable
+
+-- Steps:
+-- 1) create the adm0_thesaurus if it does not exist
+-- 2) create the ISO3_adm0_worktable if it does not exist (a new one should be created each time)
+-- 3) perform a first pass one-one match of adm0_raw -> adm0_link names from the link_table_<year>
+-- 4) perform a second pass one-one match of adm0_raw -> adm0_link names from the adm0_thesaurus
+-- 5) insert adm0_names into the admin worktable found in link table but not worktable
+-- 6) insert adm0_names into the admin worktable found in worktable but not link table
+
+-- MARIA!!! LOOK AT THIS!!!===============================================================================================
+-- Notes:
+-- you must replace the previous ISO3 with the target ISO3 manually throughout this script (other than the variables)
+-- you must replace the previous <year> with the target <year> manually throughout this script (other than the variables)
+
+
+-- SCRIPT PARAMETERS ================================================================================
+DECLARE @iso3 VARCHAR(3)
+SET @iso3 = 'NGA'
+
+-- DO NOT ALTER BELOW THIS LINE ======================================================================
+DECLARE @link_table_name VARCHAR(19)
+SET @link_table_name = @iso3 + '_link_table'
+
+DECLARE @admin_thesaurus VARCHAR(MAX)
+SET @admin_thesaurus = '[reference].dbo.adm0_thesaurus'
+
+DECLARE @admin_worktable_name VARCHAR(18)
+SET @admin_worktable_name = @iso3 + '_adm0_worktable'
+
+DECLARE @worktable_name VARCHAR(13)
+SET @worktable_name = @iso3 + '_worktable'
+
+-- CREATE ADMIN THESAURUS IF NOT EXISTS ================================================================================
+DECLARE @create_admin_thesaurus VARCHAR(max)
+SET @create_admin_thesaurus = 
+'IF NOT EXISTS (SELECT 1 FROM [reference].sys.tables WHERE name = PARSENAME ('''+@admin_thesaurus+''',1))
+CREATE TABLE ' + @admin_thesaurus + 
+'(
+	adm0_raw VARCHAR(255),
+	adm0_link VARCHAR(255),
+	fips0 VARCHAR(4),
+)'
+EXEC(@create_admin_thesaurus)
+
+
+-- CREATE ADMIN WORKTABLE IF EXISTS ================================================================================
+DECLARE @admin_worktable VARCHAR(max)
+SET @admin_worktable = 
+'IF NOT EXISTS (SELECT 1 FROM [reference].sys.tables WHERE name = PARSENAME ('''+@admin_worktable_name+''',1))
+CREATE TABLE ' + @admin_worktable_name + 
+'(
+	adm0_raw NVARCHAR(255),
+	adm0_link NVARCHAR(255),
+	fips0 VARCHAR(4),
+	update_table INT
+)'
+EXEC(@admin_worktable)
+
+
+-- UPDATE WORKTABLE ADMIN LINK NAMES FROM LINK_TABLE ================================================================================
+DECLARE @update_from_admins_from_link VARCHAR(MAX)
+SET @update_from_admins_from_link = '
+UPDATE '+@worktable_name+' SET 
+adm0_link = (
+	SELECT DISTINCT ADM0_NAME 
+	FROM '+@link_table_name+' 
+	WHERE '+@link_table_name+'.ADM0_NAME = [dbo].'+@worktable_name+'.adm0_raw
+),
+fips0 = (
+	SELECT DISTINCT FIPS0 
+	FROM '+@link_table_name+' 
+	WHERE '+@link_table_name+'.ADM0_NAME = [dbo].'+@worktable_name+'.adm0_raw
+)
+WHERE adm0_raw = (
+	SELECT DISTINCT ADM0_NAME 
+	FROM '+@link_table_name+' 
+	WHERE '+@link_table_name+'.ADM0_NAME = [dbo].'+@worktable_name+'.adm0_raw
+) 
+AND adm0_link IS NULL'
+-- AND year_start = ' + @year
+EXEC(@update_from_admins_from_link)
+
+--AND link_year = '+@year+'
+
+-- UPDATE WORKTABLE ADMIN LINK NAMES FROM ADMIN THEASURUS ================================================================================
+DECLARE @update_from_admins_from_thesaurus VARCHAR(max)
+SET @update_from_admins_from_thesaurus = '
+UPDATE '+@worktable_name+' SET 
+adm0_link = (
+	SELECT DISTINCT adm0_link 
+	FROM '+@admin_thesaurus+' 
+	WHERE 
+		'+@admin_thesaurus+'.adm0_raw = [dbo].'+@worktable_name+'.adm0_raw
+),
+fips0 = (
+	SELECT DISTINCT fips0 
+	FROM '+@admin_thesaurus+' 
+	WHERE 
+		'+@admin_thesaurus+'.adm0_raw = [dbo].'+@worktable_name+'.adm0_raw
+)
+WHERE adm0_raw = (
+	SELECT DISTINCT adm0_raw 
+	FROM '+@admin_thesaurus+' 
+	WHERE 
+		'+@admin_thesaurus+'.adm0_raw = [dbo].'+@worktable_name+'.adm0_raw 
+) 
+AND adm0_link IS NULL'
+--AND year_start = ' + @year
+EXEC(@update_from_admins_from_thesaurus)
+
+
+-- INSERT ADMIN NAMES FOUND IN WORKTABLE BUT NOT IN LINK TABLE ================================================================================
+DECLARE commands CURSOR FOR
+SELECT 
+'INSERT INTO '+@admin_worktable_name+'(adm0_raw, adm0_link, fips0) 
+ VALUES ('''+adm0_raw+''',NULL, NULL)'
+FROM (
+	SELECT DISTINCT adm0_raw
+	FROM CAF_worktable
+	WHERE adm0_link IS NULL
+) AS temp
+DECLARE @cmd VARCHAR(MAX)
+OPEN commands
+FETCH NEXT FROM commands INTO @cmd
+WHILE @@FETCH_STATUS=0
+BEGIN
+	EXEC(@cmd)
+	FETCH NEXT FROM commands INTO @cmd
+END
+CLOSE commands
+DEALLOCATE commands
+
+
+-- INSERT ADMIN NAMES FOUND IN LINK TABLE BUT NOT IN WORKTABLE ================================================================================
+-- check out the linktable name that is hardNGAed in this section!  Change it manually if necessary!
+DECLARE commands1 CURSOR FOR
+SELECT 
+'INSERT INTO '+@admin_worktable_name+'(adm0_raw, adm0_link, fips0) 
+ VALUES (NULL,'''+ADM0_NAME+''','''+FIPS0+''')'
+FROM (
+	SELECT DISTINCT ADM0_NAME, FIPS0
+	FROM CAF_link_table
+	WHERE ADM0_NAME NOT IN (SELECT DISTINCT(adm0_raw) FROM CAF_worktable WHERE adm0_raw IS NOT NULL)
+) AS temp
+DECLARE @cmd1 VARCHAR(MAX)
+OPEN commands1
+FETCH NEXT FROM commands1 INTO @cmd1
+WHILE @@FETCH_STATUS=0
+BEGIN
+	EXEC(@cmd1)
+	FETCH NEXT FROM commands1 INTO @cmd1
+END
+CLOSE commands1
+DEALLOCATE commands1
+
+
+-- CHECK THE RESULT OF THE ABOVE OPERATIONS ================================================================================
+EXEC('SELECT DISTINCT TOP 10 * FROM ' + @worktable_name + ' WHERE adm0_link IS NOT NULL')

@@ -1,0 +1,39 @@
+-- Description
+
+-- This script is an optional tool to code rows for omission into the "clean" subnat
+-- i.e. where it is clear that the values aren't reall values, or the admin or crop names 
+-- aren't real ones.
+-- i.e. In RWA there is an admin row coded = 'Moyenne'  This means average and is not an 
+-- unit.
+
+-- Coding adm_qc = 1 means 'this is not a good row'
+
+-- !! THIS SCRIPT REQUIRES MANUAL CODING !! ------------
+
+
+--HERE IS THE MANUAL PART -----------------------------------------------------
+
+
+UPDATE RWA_worktable 
+SET adm_qc = 1
+WHERE adm1_raw = 'Moyenne'
+
+
+
+UPDATE RWA_worktable 
+SET adm_comment = 'Moyenne isnt an admin name, it means average'
+WHERE adm1_raw = 'Moyenne'
+
+--- ADMQC for Ethiopia
+
+UPDATE ETH_worktable 
+SET adm_qc = 1
+where crop_raw = 'ENSET'
+
+UPDATE ETH_worktable 
+SET adm_qc = 1
+where adm2_link IS NULL 
+
+UPDATE ETH_worktable 
+SET adm_qc = 1
+where crop_prep IS NULL

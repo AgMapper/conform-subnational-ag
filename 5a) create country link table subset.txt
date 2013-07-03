@@ -1,0 +1,39 @@
+-- Description:
+-- creates an ISO3 and year specific link table to be used for the admin updates to the ISO3 worktable and the thesaurus tables
+
+
+-- SCRIPT PARAMETERS ================================================================================
+DECLARE @iso3 VARCHAR(3)
+SET @iso3 = 'MOZ'
+
+DECLARE @year VARCHAR(4)
+SET @year = '2008'
+
+-- The name of the target country as it appears in the link_table_<year> in the ADM0_NAME column.
+DECLARE @adm0_name VARCHAR(MAX)
+SET @adm0_name = 'Mozambique'
+
+
+-- DO NOT ALTER BELOW THIS LINE =====================================================================
+DECLARE @iso3_link_table_name VARCHAR(20)
+SET @iso3_link_table_name = @iso3 + '_link_table'
+
+DECLARE @link_table_name VARCHAR(MAX)
+SET @link_table_name = '[reference].[dbo].Link_Table_'+@year
+
+EXEC('
+	IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = '''+@iso3_link_table_name+''') 
+	SELECT * INTO ' + @iso3_link_table_name + ' 
+	FROM ' + @link_table_name + ' 
+	WHERE ADM0_NAME = ''' + @adm0_name + '''
+')
+
+EXEC('SELECT TOP 10 * FROM ' + @iso3_link_table_name)
+
+-- * OR * You can just use this NGAe below.
+
+--SELECT * INTO Link_Table_2005_RWA_2 FROM [HC_GIS_SDE].[dbo].Link_Table_2005 WHERE ADM0_NAME = 'Rwanda'
+
+-- SELECT * INTO Link_Table_2007_TZA FROM [TCP:184.168.72.78,1433].[HC_GIS].[dbo].Link_Table_2007 WHERE ADM0_NAME = 'United Republic of Tanzania'
+
+-- SELECT * INTO TZA_link_table_2002 FROM [TCP:184.168.72.78,1433].[HC_GIS].[dbo].Link_Table_2007 WHERE ADM0_NAME = 'United Republic of Tanzania'

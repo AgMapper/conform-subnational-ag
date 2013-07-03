@@ -1,0 +1,35 @@
+-- MANUALLY change the ISO in this code
+
+--Table a
+ETH_worktable
+fips2
+adm2_link
+
+--Table b
+ETH_link_table_2004
+fips2
+adm2_name
+
+--================================
+--Query starts here
+--================================
+
+UPDATE a
+SET a.fips2 = b.fips2
+FROM ETH_worktable AS a
+INNER JOIN ETH_link_table_2004 as b
+ON a.adm2_link = b.adm2_name
+
+
+UPDATE a
+SET a.fips1 = b.fips1
+FROM BFA_worktable AS a
+INNER JOIN BFA_link_table as b
+ON a.adm1_link = b.adm1_name
+
+
+UPDATE a
+SET a.fips2 = b.fips2
+FROM BFA_worktable AS a
+INNER JOIN BFA_link_table as b
+ON a.adm2_link = b.adm2_name
