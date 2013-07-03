@@ -1,0 +1,119 @@
+{\rtf1\ansi\ansicpg1252\cocoartf1187\cocoasubrtf390
+{\fonttbl\f0\fmodern\fcharset0 Courier;}
+{\colortbl;\red255\green255\blue255;}
+\margl1440\margr1440\vieww10800\viewh8400\viewkind0
+\deftab720
+\pard\pardeftab720
+
+\f0\fs24 \cf0 -- Description:\
+-- \
+-- Steps:\
+-- 1) generate "latest" crop_prep_to_local and crop_prep_to_spam thesaurus using scripts below.\
+-- GENERATE crop_prep_to_local table from "official" dictionary_crops residing on refernce.dbo.==========\
+\
+\
+DROP TABLE [reference].dbo.crop_prep_to_local\
+CREATE TABLE [reference].dbo.crop_prep_to_local (\
+iso3 varchar (3),\
+local_name varchar (255),\
+crop_prep varchar (255)\
+)\
+INSERT INTO [reference].dbo.crop_prep_to_local (iso3, local_name, crop_prep)\
+SELECT DISTINCT iso3, local_name, crop_prep\
+FROM [reference].dbo.dictionary_crops\
+SELECT top 10 * from [reference].dbo.crop_prep_to_local\
+\
+-- GENERATE crop_prep_to_spam table from "official" dictionary_crops residing on reference.dbo =======\
+\
+DROP TABLE [reference].dbo.crop_prep_to_spam \
+CREATE TABLE [reference].dbo.crop_prep_to_spam (\
+spam_schema int,\
+spam_order int,\
+spam_4char varchar (255),\
+spam_long varchar (255),\
+crop_prep varchar (255)\
+)\
+\
+INSERT INTO [reference].dbo.crop_prep_to_spam (spam_schema, spam_order, spam_4char, spam_long, crop_prep)\
+SELECT DISTINCT spam_schema, spam_order, spam_4char, spam_long, crop_prep\
+FROM [reference].dbo.dictionary_crops\
+SELECT top 10 * from [reference].dbo.crop_prep_to_spam\
+\
+-- SCRIPT PARAMETERS ================================================================================\
+DECLARE @iso3 varchar(3)\
+SET @iso3 = 'NGA'\
+\
+-- DO NOT ALTER BELOW THIS LINE ======================================================================\
+DECLARE @worktable_name varchar(MAX)\
+SET @worktable_name = @iso3 + '_worktable'\
+\
+DECLARE @crop_spam_worktable varchar(MAX)\
+SET @crop_spam_worktable = @iso3 + '_crop_spam_worktable'\
+\
+DECLARE @local_crop_thesaurus_name varchar(MAX)\
+SET @local_crop_thesaurus_name = '[reference].dbo.crop_prep_to_local'\
+\
+DECLARE @spam_crop_thesaurus_name varchar(MAX)\
+SET @spam_crop_thesaurus_name = '[reference].dbo.crop_prep_to_spam'\
+\
+\
+-- FIRST PASS UPDATE ALL PREP NAMES WITH DIRECT MATCHES FROM LOCAL_TO_PREP TABLE\
+EXEC('\
+UPDATE '+@worktable_name +' \
+SET crop_prep = (\
+	SELECT DISTINCT crop_prep\
+	FROM '+@local_crop_thesaurus_name+' \
+	WHERE '+@worktable_name +'.crop_raw = '+@local_crop_thesaurus_name+'.local_name\
+)\
+WHERE crop_prep IS NULL\
+')\
+\
+\
+-- FIRST PASS UPDATE BOTH 2000 AND 2005 SPAM AGGREGATIONS FROM DIRECT MATCHES WITH LOCAL_TO_PREP TO PREP_TO_SPAM\
+EXEC('\
+UPDATE '+@worktable_name +' \
+SET crop_spam2000 = (\
+	SELECT DISTINCT spam_4char \
+	FROM '+@spam_crop_thesaurus_name+' \
+	WHERE crop_prep = (\
+		SELECT tbl.crop_prep FROM (SELECT TOP 1 crop_prep, iso3\
+		FROM '+@local_crop_thesaurus_name+' \
+		WHERE '+@worktable_name +'.crop_raw = local_name AND (iso3 = '''+@iso3+''' OR iso3 IS NULL)\
+		ORDER BY iso3 DESC) AS tbl\
+	) AND spam_schema = 2000 AND crop_spam2000 IS NULL\
+)')\
+\
+EXEC('\
+UPDATE '+@worktable_name +' \
+SET crop_spam2005 = (\
+	SELECT DISTINCT spam_4char \
+	FROM '+@spam_crop_thesaurus_name+' \
+	WHERE crop_prep = (\
+		SELECT tbl.crop_prep FROM (SELECT TOP 1 crop_prep, iso3\
+		FROM '+@local_crop_thesaurus_name+' \
+		WHERE '+@worktable_name +'.crop_raw = local_name AND (iso3 = '''+@iso3+''' OR iso3 IS NULL)\
+		ORDER BY iso3 DESC) AS tbl\
+	) AND spam_schema = 2005 AND crop_spam2005 IS NULL\
+)')\
+\
+-- CREATE A CROP WORKTABLE FOR ALL CROP_RAW VALUES NOT FOUND IN THE ABOVE STEPS\
+DECLARE @create_crop_spam_worktable VARCHAR(MAX)\
+SET @create_crop_spam_worktable = \
+'IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = '''+@crop_spam_worktable+''') \
+CREATE TABLE ' + @crop_spam_worktable + \
+'(\
+	crop_raw VARCHAR(255),\
+	crop_prep VARCHAR(255),\
+	iso3 VARCHAR(3),\
+	update_table INT\
+)'\
+EXEC(@create_crop_spam_worktable)\
+\
+-- INSERT ROWS INTO CROP WORKTABLE\
+EXEC('\
+	INSERT INTO '+ @crop_spam_worktable+' (crop_prep, crop_raw, iso3) \
+	SELECT DISTINCT crop_prep, crop_raw, '''+@iso3+'''\
+	FROM '+@worktable_name +' \
+	WHERE crop_prep IS NULL\
+')\
+}

@@ -1,0 +1,124 @@
+{\rtf1\ansi\ansicpg1252\cocoartf1187\cocoasubrtf390
+{\fonttbl\f0\fmodern\fcharset0 Courier;}
+{\colortbl;\red255\green255\blue255;}
+\margl1440\margr1440\vieww10800\viewh8400\viewkind0
+\deftab720
+\pard\pardeftab720
+
+\f0\fs24 \cf0 -- Description:\
+-- inserts rows from the raw dataset into the empty ISO3 worktable\
+\
+\
+-- SCRIPT PARAMETERS ================================================================================\
+DECLARE @iso3 varchar(3)\
+SET @iso3 = 'NGA'\
+\
+\
+-- Incoming statistics table name\
+DECLARE @imported_table_name varchar(max)\
+SET @imported_table_name = 'NGA_raw_50'\
+\
+\
+-- DO NOT ALTER BELOW THIS LINE ======================================================================\
+DECLARE @worktable_name varchar(13)\
+SET @worktable_name = @iso3 + '_worktable'\
+\
+DECLARE @insert_rows_into_worktable varchar(max)\
+SET @insert_rows_into_worktable = '\
+INSERT INTO ' + @worktable_name + '(\
+\
+create_date,\
+date_start,\
+year_start,\
+month_start,\
+day_start,\
+date_end,\
+year_end,\
+month_end,\
+day_end,\
+iso3,\
+adm0_raw,\
+adm1_raw,\
+crop_raw,\
+val1_raw,\
+unit_raw,\
+item\
+)\
+SELECT\
+\
+GETDATE(),\
+CAST(date_start AS DATE),\
+CAST(DATEPART(year,CAST(date_start AS DATE)) AS INT),\
+CAST(DATEPART(month,CAST(date_start AS DATE)) AS INT),\
+CAST(DATEPART(day,CAST(date_start AS DATE)) AS INT),\
+CAST(date_end AS DATE),\
+CAST(DATEPART(year,CAST(date_end AS DATE)) AS INT),\
+CAST(DATEPART(month,CAST(date_end AS DATE)) AS INT),\
+CAST(DATEPART(day,CAST(date_end AS DATE)) AS INT),\
+CAST(''NGA'' AS VARCHAR(3)),\
+CAST(''Nigeria'' as VARCHAR(255)),\
+CAST(adm1_raw AS NVARCHAR(255)),\
+CAST(crop_raw AS NVARCHAR(255)),\
+CAST(val1_raw AS FLOAT),\
+CAST(unit_raw AS NVARCHAR(255)),\
+CAST(item AS VARCHAR(255))\
+\
+FROM ' + @imported_table_name\
+\
+\
+\
+EXEC (@insert_rows_into_worktable)\
+\
+EXEC('SELECT TOP 10 * FROM ' + @worktable_name)\
+\
+\
+/*\
+-- MOST OF ALL THE LISTED columns when you need them --\
+-- Paste from here when the list above doesn't have all the columns you need --\
+DECLARE @insert_rows_into_worktable varchar(max)\
+SET @insert_rows_into_worktable = '\
+INSERT INTO ' + @worktable_name + '(\
+\
+create_date,\
+date_start,\
+year_start,\
+month_start,\
+day_start,\
+date_end,\
+year_end,\
+month_end,\
+day_end,\
+season,\
+iso3,\
+adm0_raw,\
+adm1_raw,\
+adm2_raw,\
+adm_comment,\
+crop_raw,\
+unit_raw,\
+val2_raw,\
+item\
+)\
+SELECT\
+\
+GETDATE(),\
+CAST(date_start AS DATE),\
+CAST(DATEPART(year,CAST(date_start AS DATE)) AS INT),\
+CAST(DATEPART(month,CAST(date_start AS DATE)) AS INT),\
+CAST(DATEPART(day,CAST(date_start AS DATE)) AS INT),\
+CAST(date_end AS DATE),\
+CAST(DATEPART(year,CAST(date_end AS DATE)) AS INT),\
+CAST(DATEPART(month,CAST(date_end AS DATE)) AS INT),\
+CAST(DATEPART(day,CAST(date_end AS DATE)) AS INT),\
+CAST(season AS VARCHAR(255)),\
+CAST(iso3 AS VARCHAR(3)),\
+CAST(adm0_raw as VARCHAR(255)),\
+CAST(adm1_raw AS NVARCHAR(255)),\
+CAST(adm2_raw AS NVARCHAR(255)),\
+CAST(adm_comment AS NVARCHAR(255)),\
+CAST(crop_raw AS NVARCHAR(255)),\
+CAST(unit_raw AS NVARCHAR(255)),\
+CAST(val2_raw AS FLOAT),\
+CAST(item AS VARCHAR(255)\
+*/\
+}
